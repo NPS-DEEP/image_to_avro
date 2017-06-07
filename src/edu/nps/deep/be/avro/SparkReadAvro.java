@@ -68,7 +68,8 @@ public class SparkReadAvro implements Serializable
           dfr.getMetaString(SOURCE_FILE_MODTIME_META_KEY),
           dfr.getMetaString(AVRO_FILE_BUILDER_META_KEY),
           dfr.getMetaString(AVRO_FILE_CREATION_DATE_META_KEY),
-          dfr.getMetaString(BE_AVRO_VERSION_META_KEY));
+          dfr.getMetaString(BE_AVRO_VERSION_META_KEY),
+          dfr.getMetaString(AVRO_DATA_MD5));
     }
     catch(IOException ex) {
       System.err.println("Error retrieving meta data from "+path);
