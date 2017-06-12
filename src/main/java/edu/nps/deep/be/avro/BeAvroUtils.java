@@ -23,7 +23,17 @@ public class BeAvroUtils
   }
 
   /* Even numbers get inputStream, odds outputStream */
+  public static FilePack[] getFileObjectsNoStreams(String... paths) throws IOException
+  {
+    return _getFileObjects(false,paths);
+  }
+
   public static FilePack[] getFileObjects(String ... paths) throws IOException
+  {
+    return _getFileObjects(true,paths);
+  }
+
+  private static FilePack[] _getFileObjects(boolean makeStreams, String ... paths) throws IOException
   {
     FilePack[] arr = new FilePack[paths.length];
     for(int i=0;i<paths.length;i++) {
@@ -38,12 +48,14 @@ public class BeAvroUtils
         pack.p = new Path(pack.uri.getPath());
 
         if(i%2 == 0) {
-          pack.inputStream = pack.fSys.open(pack.p);
           pack.inputFileStatus = pack.fSys.getFileStatus(pack.p);
-          pack.inputFsInput = new FsInput(pack.p,pack.fSys);
+          if (makeStreams) {
+            pack.inputStream = pack.fSys.open(pack.p);
+            pack.inputFsInput = new FsInput(pack.p, pack.fSys);
+          }
         }
         else
-          pack.outputStream = pack.fSys.create(pack.p,true);
+          if(makeStreams) pack.outputStream = pack.fSys.create(pack.p,true);
       }
       arr[i] = pack;
     }
@@ -56,5 +68,11 @@ public class BeAvroUtils
       return FileSystem.getLocal(new Configuration());
 
     return FileSystem.get(uri,new Configuration());
+  }
+
+  public static FileSystem getFileSystem(String pathString) throws IOException
+  {
+    URI uri = URI.create(pathString);
+    return getFS(uri);
   }
 }

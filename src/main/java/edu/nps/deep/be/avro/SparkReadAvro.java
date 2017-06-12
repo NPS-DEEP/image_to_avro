@@ -2,8 +2,6 @@ package edu.nps.deep.be.avro;
 
 import edu.nps.deep.be.avro.BeAvroUtils.FilePack;
 import edu.nps.deep.be.avro.schemas.DiskImageSplit;
-import edu.nps.deep.be_scan.Artifact;
-import edu.nps.deep.be_scan.BEScan;
 import org.apache.avro.Schema;
 import org.apache.avro.file.DataFileReader;
 import org.apache.avro.io.DatumReader;
@@ -120,7 +118,7 @@ public class SparkReadAvro implements Serializable
   {
     System.out.println("toBulkExtractor(): data, "+longForm.format(dsize)+" at file offset "+longForm.format(sourceFileOffset));
     System.out.println("meta:"+metadata);
-    BEScan scanner = new BEScan("email", data, dsize);
+  /*  BEScan scanner = new BEScan("email", data, dsize);
 
     Artifact artifact = scanner.next();  //looks like it doesn't have a good way to return null or not-found
     while(artifact.getArtifactClass() != null && artifact.getArtifactClass().length()>0) {
@@ -135,6 +133,7 @@ public class SparkReadAvro implements Serializable
       artifact = scanner.next();
     }
     scanner.delete();
+    */
   }
 
   private Job getJob(Schema avroSchema)

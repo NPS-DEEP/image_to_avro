@@ -34,12 +34,24 @@ public class SparkAvroizeDirectory implements Serializable
 {
   public static void main(String[] args)
   {
-    System.out.println("Tom is wrong");
-    String[] sa = App.getPaths(args,2);
-    new SparkAvroizeDirectory().avroizeDirectory(sa[0], sa[1]);
+    App.AppArgs appArgs = App.get2PathsAndCount(args);
+    new SparkAvroizeDirectory().avroizeDirectory(appArgs.inputpath,appArgs.outputpath,appArgs.max2Process);
+  }
+  private boolean fileExists(FileStatus inFs, BeAvroUtils.FilePack outPack)
+  {
+    String inputName = inFs.getPath().getName();
+    Path outpath = new Path(outPack.p,inputName+".avro");
+    try {
+      return outPack.fSys.exists(outpath);
+    }
+    catch(IOException ex) {
+      System.err.println("Error when checking if output file exists -- "+outpath.toString()+" : "+ex.getLocalizedMessage());
+      System.exit(-1);
+      return true; // not used but avoids ide error
+    }
   }
 
-  public void avroizeDirectory(String inputPath, String outputPath)
+  public void avroizeDirectory(String inputPath, String outputPath, int maxFiles)
   {
     System.out.println("SparkAvroizeDirectory: input: "+inputPath+" output: "+outputPath);
     int INP=0,OUTP=1;
@@ -58,26 +70,28 @@ public class SparkAvroizeDirectory implements Serializable
 
       FileSystem inpFs = filedata[INP].fSys;
 
-      SparkConf conf = new SparkConf().setAppName("SparkAvroizeDirectory");
-      //conf.setMaster("local[*]");
-      JavaSparkContext sc = new JavaSparkContext(conf);
-
       ArrayList<String> filePaths = new ArrayList<>();
       FileStatus[] fs = inpFs.listStatus(filedata[INP].p);
       if(fs == null || fs.length<=0) {
         System.err.println("No files found in "+inputPath);
         System.exit(-1);
       }
-      int junk = 0;
+      int fcount = 0;
       for(FileStatus fileS : fs) {
         if(!fileS.isFile())
           continue;
+        if(fileExists(fileS,filedata[OUTP]))
+          continue;
         filePaths.add(fileS.getPath().toString());
-        junk++;
-        if(junk>=2)
+        fcount++;
+        if(fcount>=maxFiles)
           break;
       }
-      System.out.println(""+filePaths.size()+" files found in "+inputPath);
+      System.out.println(""+filePaths.size()+" unconverted files found in "+inputPath);
+
+      SparkConf conf = new SparkConf().setAppName("SparkAvroizeDirectory");
+      //conf.setMaster("local[*]");
+      JavaSparkContext sc = new JavaSparkContext(conf);
 
       // This is how we get the output path out to every executor
       final Broadcast<String> outputDirectoryPath = sc.broadcast(outputPath); // leave on the hdfs: filedata[OUTP].p.toString());
@@ -117,7 +131,7 @@ public class SparkAvroizeDirectory implements Serializable
     Path outP = new Path(oPath, inpP.getName()+".avro");
     FSDataOutputStream outStream = outFS.create(outP,true);
 
-    DatumWriter<DiskImageSplit> diDatumWriter = new SpecificDatumWriter<DiskImageSplit>(DiskImageSplit.class);
+    DatumWriter<DiskImageSplit> diDatumWriter = new SpecificDatumWriter<>(DiskImageSplit.class);
     DataFileWriter<DiskImageSplit> diFileWriter = new DataFileWriter<>(diDatumWriter);
     diFileWriter.setCodec(CodecFactory.snappyCodec());
 
@@ -169,7 +183,7 @@ public class SparkAvroizeDirectory implements Serializable
   {
     int count = 0;
     while(count < ba.length) {
-      int ret = -1;
+      int ret;
       try {
         //System.out.println("Trying to read from "+(offset+count)+" to buffer offset "+count+" length "+(ba.length-count));
         ret = is.read(offset+count,ba,count,ba.length-count);
