@@ -2,13 +2,56 @@ group 'edu.nps.deep'
 version '1.0'
 
 apply plugin: 'java'
+apply plugin: 'application'
+apply plugin: 'idea'
 
-sourceCompatibility = 1.8
+sourceCompatibility = 1.7
+
+mainClassName = 'edu.nps.deep.be.avro.SparkAvroizeDirectory'
 
 repositories {
-    mavenCentral()
+    jcenter()
+    //mavenCentral()
+}
+
+// add the generated sources to the mix
+sourceSets {
+    main {
+        java {
+            srcDir 'src/generated/java'
+        }
+    }
+}
+
+configurations {
+    avrocompile
 }
 
 dependencies {
+    compile group: 'org.apache.spark', name: 'spark-core_2.11', version: '1.6.0'
+    compile group: 'org.apache.avro', name: 'avro', version: '1.8.1'
+    compile group: 'org.apache.avro', name: 'avro-mapred', version: '1.8.1'
+    compile group: 'org.apache.commons', name: 'commons-lang3', version: '3.5'
+    compile group: 'org.apache.hadoop', name: 'hadoop-common', version: '2.6.0'
+    compile group: 'org.apache.hadoop', name: 'hadoop-client', version: '2.6.0'
     testCompile group: 'junit', name: 'junit', version: '4.12'
+    avrocompile 'org.apache.avro:avro-tools:1.8.1'
 }
+task corpusToAvroSparkRun(overwrite: true, type: Exec, dependsOn: [assemble]) {
+    executable = 'spark-submit'
+    //args = ["--class","software.nps.visionlab.sat_example.bin.Main",  "--driver-library-path", "/home/trbatcha/tools/lib:/home/trbatcha/tools/caffelib", "--driver-memory", "8g", "--num-executors", "20", "--executor-cores", "24", "/home/trbatcha/salt-examples/sat-example/gen2/build/libs/sat_example-${version}.jar", "/user/trbatcha/validSats", "/home/trbatcha/output"]
+    args = ["--class", "edu.nps.deep.be.avro.SparkAvroizeDirectory", "--driver-memory", "7g", "./lib/AvroSparkBulkExtractor.jar", "hdfs://hadmin-1-33a.ib.grace.cluster/user/tjandrze/DEEP/input", "hdfs://hadmin-1-33a.ib.grace.cluster/user/jmbailey/DEEP/avro"]
+}
+
+task javadocs(type: Javadoc) {
+    source = sourceSets.main.allJava
+}
+
+task compileAvroSchema(type: JavaExec) {
+    classpath configurations.avrocompile
+    main = 'org.apache.avro.tool.Main'
+    args = ['compile', 'schema', 'src/main/resources/schemas/diskImageSplit.avsc', 'src/generated/java']
+    //args = ['compile', 'schema', 'src/main/resources/schemas/diskImageSplitExperimental.avsc', '/Users/mike/Desktop/himike']
+}
+
+compileJava.dependsOn compileAvroSchema
