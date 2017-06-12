@@ -1,9 +1,0 @@
-{"namespace": "edu.nps.deep.be.avro.schemas",
- "type": "record",
- "name": "DiskImageSplitExperimental",
- "fields": [
-   {"name": "fileoffset", "type": "long"},
-   {"name": "datalength", "type": "long"},
-   {"name": "data", "type":{ "type": "array", "name":"dataArray", "items": {"type":"fixed", "size": 1048576, "name": "SplitDataExperimental"}}}
-  ]
-}
