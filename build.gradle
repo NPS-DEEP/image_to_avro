@@ -40,7 +40,7 @@ dependencies {
 task corpusToAvroSparkRun(overwrite: true, type: Exec, dependsOn: [assemble]) {
     executable = 'spark-submit'
     //args = ["--class","software.nps.visionlab.sat_example.bin.Main",  "--driver-library-path", "/home/trbatcha/tools/lib:/home/trbatcha/tools/caffelib", "--driver-memory", "8g", "--num-executors", "20", "--executor-cores", "24", "/home/trbatcha/salt-examples/sat-example/gen2/build/libs/sat_example-${version}.jar", "/user/trbatcha/validSats", "/home/trbatcha/output"]
-    args = ["--class", "edu.nps.deep.be.avro.SparkAvroizeDirectory", "--driver-memory", "7g", "./lib/AvroSparkBulkExtractor.jar", "hdfs://hadmin-1-33a.ib.grace.cluster/user/tjandrze/DEEP/input", "hdfs://hadmin-1-33a.ib.grace.cluster/user/jmbailey/DEEP/avro"]
+    args = ["--class", "edu.nps.deep.be.avro.SparkAvroizeDirectory", "--driver-memory", "7g", "--num-executors","10","build/libs/image_to_avro-1.0.jar", "hdfs://hadmin-1-33a.ib.grace.cluster/user/tjandrze/DEEP/input", "hdfs://hadmin-1-33a.ib.grace.cluster/user/jmbailey/DEEP/avro"]
 }
 
 task javadocs(type: Javadoc) {
