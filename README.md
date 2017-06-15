@@ -2,6 +2,7 @@
 Convert media image files to Avro files
 
 gradle build
+
 gradle corpusToAvroSparkRun
 
 ## Download
