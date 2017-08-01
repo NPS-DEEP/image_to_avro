@@ -50,13 +50,61 @@ public class SparkAvroizeDirectory implements Serializable
       return true; // not used but avoids ide error
     }
   }
-
+  private int INP=0,OUTP=1;
   public void avroizeDirectory(String inputPath, String outputPath, int maxFiles)
   {
     System.out.println("SparkAvroizeDirectory: input: "+inputPath+" output: "+outputPath);
-    int INP=0,OUTP=1;
+    try {
+      BeAvroUtils.FilePack[] filedata = BeAvroUtils.getFileObjectsNoStreams(inputPath,outputPath);
+
+      ArrayList<String> filePaths = BeAvroUtils.getFileList(filedata,maxFiles);
+
+      filedata[OUTP].fSys.mkdirs(filedata[OUTP].p); // ensure output dir exists
+
+      if(!filedata[OUTP].fSys.isDirectory(filedata[OUTP].p)) {  // might be superfluous
+        System.err.println("Outpath is not a directory");
+        System.exit(-1);
+      }
+
+      SparkConf conf = new SparkConf().setAppName("SparkAvroizeDirectory");
+      //conf.setMaster("local[*]");
+      JavaSparkContext sc = new JavaSparkContext(conf);
+
+      // This is how we get the output path out to every executor
+      final Broadcast<String> outputDirectoryPath = sc.broadcast(outputPath); // leave on the "hdfs:"
+
+      JavaRDD<String> pathRDD = sc.parallelize(filePaths);
+      JavaRDD<Object> mappedRDD = pathRDD.map( new Function<String,Object>()
+      {
+        public Object call(String pathString)
+        {
+          try {
+            avroizeFile(pathString, outputDirectoryPath.getValue());
+          }
+          catch(Exception ex) {
+            System.err.println("Exception ex: "+ex.getLocalizedMessage());
+            ex.printStackTrace();
+          }
+          return null;
+        }
+      });
+      mappedRDD.count(); //do it
+    }
+
+    catch(Exception ex) {
+      System.err.println("Exception: "+ex.getClass().getSimpleName());
+    }
+    System.out.println("Job done.");
+  }
+
+  public void xavroizeDirectory(String inputPath, String outputPath, int maxFiles)
+  {
+    System.out.println("SparkAvroizeDirectory: input: "+inputPath+" output: "+outputPath);
+
     try {
       BeAvroUtils.FilePack[] filedata = BeAvroUtils.getFileObjectsNoStreams(inputPath, outputPath);
+      int INP=0, OUTP=1;
+
       if(!filedata[INP].fSys.isDirectory(filedata[INP].p)) {
         System.err.println("Input path is not a directory");
         System.exit(-1);

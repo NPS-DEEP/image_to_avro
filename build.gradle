@@ -29,13 +29,23 @@ configurations {
 
 dependencies {
     compile group: 'org.apache.spark', name: 'spark-core_2.11', version: '1.6.0'
-    compile group: 'org.apache.avro', name: 'avro', version: '1.8.1'
-    compile group: 'org.apache.avro', name: 'avro-mapred', version: '1.8.1'
+    compile group: 'org.apache.avro', name: 'avro', version: '1.7.7'
+    //compile group: 'org.apache.avro', name: 'avro-mapred', version: '1.8.1'
     compile group: 'org.apache.commons', name: 'commons-lang3', version: '3.5'
     compile group: 'org.apache.hadoop', name: 'hadoop-common', version: '2.6.0'
     compile group: 'org.apache.hadoop', name: 'hadoop-client', version: '2.6.0'
     testCompile group: 'junit', name: 'junit', version: '4.12'
-    avrocompile 'org.apache.avro:avro-tools:1.8.1'
+    avrocompile 'org.apache.avro:avro-tools:1.7.7'
+}
+jar {
+  manifest {
+    attributes(
+      "Class-Path": configurations.compile.collect { it.getName() }.join(' '))
+  }
+}
+task copyToLib(type: Copy) {
+    into "$buildDir/libs"
+    from configurations.runtime
 }
 task corpusToAvroSparkRun(overwrite: true, type: Exec, dependsOn: [assemble]) {
     executable = 'spark-submit'
@@ -51,7 +61,170 @@ task compileAvroSchema(type: JavaExec) {
     classpath configurations.avrocompile
     main = 'org.apache.avro.tool.Main'
     args = ['compile', 'schema', 'src/main/resources/schemas/diskImageSplit.avsc', 'src/generated/java']
-    //args = ['compile', 'schema', 'src/main/resources/schemas/diskImageSplitExperimental.avsc', '/Users/mike/Desktop/himike']
 }
 
+task compileAvroSchema127M(type: JavaExec) {
+    classpath configurations.avrocompile
+    main = 'org.apache.avro.tool.Main'
+    args = ['compile', 'schema', 'src/main/resources/schemas/diskImageSplit127M.avsc', 'src/generated/java']
+}
+
+task compileAvroSchema64M(type: JavaExec) {
+    classpath configurations.avrocompile
+    main = 'org.apache.avro.tool.Main'
+    args = ['compile', 'schema', 'src/main/resources/schemas/diskImageSplit64M.avsc', 'src/generated/java']
+}
+
+task compileAvroSchema63M(type: JavaExec) {
+    classpath configurations.avrocompile
+    main = 'org.apache.avro.tool.Main'
+    args = ['compile', 'schema', 'src/main/resources/schemas/diskImageSplit63M.avsc', 'src/generated/java']
+}
+
+task compileAvroSchemas(dependsOn: ['compileAvroSchema','compileAvroSchema127M','compileAvroSchema64M','compileAvroSchema63M'])
+
 compileJava.dependsOn compileAvroSchema
+
+// Specific tests
+// 998768640 2016-07-28 18:30 /user/tjandrze/DEEP/input/TH03-0010.E01_1469755824.raw
+task avroMake128M(overwrite: true, type: Exec, dependsOn: [assemble]) {
+    executable = 'spark-submit'
+    args = ["--class", "edu.nps.deep.be.avro.AvroizeFile128M",\
+            "--driver-memory", "7g",\
+            "build/libs/image_to_avro-1.0.jar",
+            "hdfs://user/tjandrze/DEEP/input/TH03-0010.E01_1469755824.raw",
+            "hdfs://user/jmbailey/DEEP/test/TH03-0010.E01_1469755824.raw.128M.avro"]
+}
+
+task avroMake127M(overwrite: true, type: Exec, dependsOn: [assemble]) {
+    executable = 'spark-submit'
+    args = ["--class", "edu.nps.deep.be.avro.AvroizeFile127M",\
+            "--driver-memory", "7g",\
+            "build/libs/image_to_avro-1.0.jar",
+            "hdfs://user/tjandrze/DEEP/input/TH03-0010.E01_1469755824.raw",
+            "hdfs://user/jmbailey/DEEP/test/TH03-0010.E01_1469755824.raw.127M.avro"]
+}
+
+task avroMake64M(overwrite: true, type: Exec, dependsOn: [assemble]) {
+    executable = 'spark-submit'
+    args = ["--class", "edu.nps.deep.be.avro.AvroizeFile64M",\
+            "--driver-memory", "7g",\
+            "build/libs/image_to_avro-1.0.jar",
+            "hdfs://user/tjandrze/DEEP/input/TH03-0010.E01_1469755824.raw",
+            "hdfs://user/jmbailey/DEEP/test/TH03-0010.E01_1469755824.raw.64M.avro"]
+}
+
+task avroMake63M(overwrite: true, type: Exec, dependsOn: [assemble]) {
+    executable = 'spark-submit'
+    args = ["--class", "edu.nps.deep.be.avro.AvroizeFile63M",\
+            "--driver-memory", "7g",\
+            "build/libs/image_to_avro-1.0.jar",
+            "hdfs://user/tjandrze/DEEP/input/TH03-0010.E01_1469755824.raw",
+            "hdfs://user/jmbailey/DEEP/test/TH03-0010.E01_1469755824.raw.63M.avro"]
+}
+/*
+ * Read avro files
+ */
+
+task avroRead63M(overwrite: true, type: Exec, dependsOn: [assemble,copyToLib]) {
+    executable = 'spark-submit'
+    args = ["--class", "edu.nps.deep.be.avro.SparkReadAvro63M",
+            "--driver-memory", "7g",
+            "build/libs/image_to_avro-1.0.jar",
+            "hdfs://user/jmbailey/DEEP/test/TH03-0010.E01_1469755824.raw.63M.avro"]
+}
+
+task avroRead64M(overwrite: true, type: Exec, dependsOn: [assemble,copyToLib]) {
+    executable = 'spark-submit'
+    args = ["--class", "edu.nps.deep.be.avro.SparkReadAvro64M",
+            "--driver-memory", "7g",
+            "build/libs/image_to_avro-1.0.jar",
+            "hdfs://user/jmbailey/DEEP/test/TH03-0010.E01_1469755824.raw.64M.avro"]
+}
+
+task avroRead127M(overwrite: true, type: Exec, dependsOn: [assemble,copyToLib]) {
+    executable = 'spark-submit'
+    args = ["--class", "edu.nps.deep.be.avro.SparkReadAvro127M",
+            "--driver-memory", "7g",
+            "build/libs/image_to_avro-1.0.jar",
+            "hdfs://user/jmbailey/DEEP/test/TH03-0010.E01_1469755824.raw.127M.avro"]
+}
+
+task avroRead128M(overwrite: true, type: Exec, dependsOn: [assemble,copyToLib]) {
+    executable = 'spark-submit'
+    args = ["--class", "edu.nps.deep.be.avro.SparkReadAvro128M",
+            "--driver-memory", "7g",
+            "build/libs/image_to_avro-1.0.jar",
+            "hdfs://user/jmbailey/DEEP/test/TH03-0010.E01_1469755824.raw.128M.avro"]
+}
+
+/*
+ * Create avro files on local machine
+*/
+task avroMake128MLocal(overwrite: true, type: Exec, dependsOn: [assemble,copyToLib]) {
+    executable = '/Users/mike/Desktop/JavaMisc/spark-1.6.0-bin-hadoop2.6/bin/spark-submit'
+    args = ["--class", "edu.nps.deep.be.avro.AvroizeFile128M",\
+            "build/libs/image_to_avro-1.0.jar",
+            "file:/Users/mike/Desktop/avrotests/workGigFile.txt",
+            "file:/Users/mike/Desktop/avrotests/workGigFile.txt.128M.avro"]
+}
+
+task avroMake127MLocal(overwrite: true, type: Exec, dependsOn: [assemble,copyToLib]) {
+    executable = '/Users/mike/Desktop/JavaMisc/spark-1.6.0-bin-hadoop2.6/bin/spark-submit'
+    args = ["--class", "edu.nps.deep.be.avro.AvroizeFile127M",\
+            "build/libs/image_to_avro-1.0.jar",
+            "file:/Users/mike/Desktop/avrotests/workGigFile.txt",
+            "file:/Users/mike/Desktop/avrotests/workGigFile.txt.127M.avro"]
+}
+
+task avroMake64MLocal(overwrite: true, type: Exec, dependsOn: [assemble,copyToLib]) {
+    executable = '/Users/mike/Desktop/JavaMisc/spark-2.1.0-bin-hadoop2.6/bin/spark-submit'
+    args = ["--class", "edu.nps.deep.be.avro.AvroizeFile64M",\
+            "build/libs/image_to_avro-1.0.jar",
+            "file:/Users/mike/Desktop/avrotests/workGigFile.txt",
+            "file:/Users/mike/Desktop/avrotests/workGigFile.txt.64M.avro"]
+}
+
+task avroMake63MLocal(overwrite: true, type: Exec, dependsOn: [assemble,copyToLib]) {
+    executable = '/Users/mike/Desktop/JavaMisc/spark-2.1.0-bin-hadoop2.6/bin/spark-submit'
+    args = ["--class", "edu.nps.deep.be.avro.AvroizeFile63M",\
+            "build/libs/image_to_avro-1.0.jar",
+            "file:/Users/mike/Desktop/avrotests/workGigFile.txt",
+            "file:/Users/mike/Desktop/avrotests/workGigFile.txt.63M.avro"]
+}
+
+/*
+ * Read avro files on local machine
+*/
+
+task avroRead63MLocal(overwrite: true, type: Exec, dependsOn: [assemble,copyToLib]) {
+    executable = '/Users/mike/Desktop/JavaMisc/spark-2.1.0-bin-hadoop2.6/bin/spark-submit'
+    args = ["--class", "edu.nps.deep.be.avro.SparkReadAvro63M",
+            "--driver-memory", "7g",
+            "build/libs/image_to_avro-1.0.jar",
+            "file:/Users/mike/Desktop/avrotests/workGigFile.txt.63M.avro"]
+}
+
+task avroRead64MLocal(overwrite: true, type: Exec, dependsOn: [assemble,copyToLib]) {
+    executable = '/Users/mike/Desktop/JavaMisc/spark-2.1.0-bin-hadoop2.6/bin/spark-submit'
+    args = ["--class", "edu.nps.deep.be.avro.SparkReadAvro64M",
+            "--driver-memory", "7g",
+            "build/libs/image_to_avro-1.0.jar",
+            "file:/Users/mike/Desktop/avrotests/workGigFile.txt.64M.avro"]
+}
+
+task avroRead127MLocal(overwrite: true, type: Exec, dependsOn: [assemble,copyToLib]) {
+    executable = '/Users/mike/Desktop/JavaMisc/spark-2.1.0-bin-hadoop2.6/bin/spark-submit'
+    args = ["--class", "edu.nps.deep.be.avro.SparkReadAvro127M",
+            "--driver-memory", "7g",
+            "build/libs/image_to_avro-1.0.jar",
+            "file:/Users/mike/Desktop/avrotests/workGigFile.txt.127M.avro"]
+}
+
+task avroRead128MLocal(overwrite: true, type: Exec, dependsOn: [assemble,copyToLib]) {
+    executable = '/Users/mike/Desktop/JavaMisc/spark-2.1.0-bin-hadoop2.6/bin/spark-submit'
+    args = ["--class", "edu.nps.deep.be.avro.SparkReadAvro128M",
+            "--driver-memory", "7g",
+            "build/libs/image_to_avro-1.0.jar",
+            "file:/Users/mike/Desktop/avrotests/workGigFile.txt.128M.avro"]
+}

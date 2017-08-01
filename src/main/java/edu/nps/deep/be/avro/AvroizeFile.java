@@ -1,12 +1,6 @@
 package edu.nps.deep.be.avro;
 
-import edu.nps.deep.be.avro.schemas.DiskImageSplit;
-import edu.nps.deep.be.avro.schemas.SplitData;
 import edu.nps.deep.be.avro.BeAvroUtils.FilePack;
-import org.apache.avro.file.CodecFactory;
-import org.apache.avro.file.DataFileWriter;
-import org.apache.avro.io.DatumWriter;
-import org.apache.avro.specific.SpecificDatumWriter;
 import org.apache.commons.lang.time.DurationFormatUtils;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
@@ -21,89 +15,83 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 
 import static edu.nps.deep.be.avro.BEAvroConstants.*;
+import static edu.nps.deep.be.avro.BeAvroUtils.FilePack.INP;
+import static edu.nps.deep.be.avro.BeAvroUtils.FilePack.OUTP;
 
 public class AvroizeFile
 {
   public static void main(String[] args)
   {
-    String[] sa = App.getPaths(args,2);
-    new AvroizeFile().avroIzeFile(sa[0], sa[1]);
-  }
-
-  public void avroIzeFile(String inputPath, String outputPath)
-  {
-    if(inputPath == null || inputPath.length()<=0)
-      inputPath = DEFAULT_SAMPLE_FILE;
-    if(outputPath == null || outputPath.length()<=0)
-      outputPath = DEFAULT_AVRO_FILE;
-
-    System.out.println("AvroizeFile: input: "+inputPath+" output: "+outputPath);
-    int INP=0,OUTP=1;
+    String[] sa = App.getPaths(args, 2);
+    AvroConfig64M cfg = new AvroConfig64M();
     try {
-      FilePack[] filedata = BeAvroUtils.getFileObjects(inputPath,outputPath);
-
-      DatumWriter<DiskImageSplit> diDatumWriter = new SpecificDatumWriter<DiskImageSplit>(DiskImageSplit.class);
-      DataFileWriter<DiskImageSplit> diFileWriter = new DataFileWriter<>(diDatumWriter);
-      diFileWriter.setCodec(CodecFactory.snappyCodec());
-
-      diFileWriter.create(new DiskImageSplit().getSchema(), filedata[OUTP].outputStream);
-      MessageDigest md5 = MessageDigest.getInstance("MD5");
-
-      byte[] ba = new byte[SAMPLE_SPLIT_SIZE];
-      long starttime = System.currentTimeMillis();
-      long fileoffset = 0;
-      int countRead = fillBuffer(fileoffset,ba,filedata[INP].inputStream);
-
-      while(countRead != -1) {
-        md5.update(ba, 0, countRead);
-        if(countRead != SAMPLE_SPLIT_SIZE)
-          for(int i=countRead;i<SAMPLE_SPLIT_SIZE;i++)
-            ba[i] = 0; //zero out unread
-        DiskImageSplit dis = new DiskImageSplit(fileoffset,(long)countRead,new SplitData(ba));
-        diFileWriter.append(dis);
-        System.out.print(".");
-        fileoffset += countRead;
-
-        countRead = fillBuffer(fileoffset,ba,filedata[INP].inputStream);
-        System.out.println("."+" countRead: "+countRead);
-      }
-      String MD5String = new BigInteger(1,md5.digest()).toString(16).toUpperCase();
-      addMeta(filedata[INP].inputFileStatus,diFileWriter,MD5String);
-
-      filedata[INP].inputStream.close();
-      diFileWriter.close();
-
-      FileStatus outStatus = filedata[OUTP].fSys.getFileStatus(filedata[OUTP].p);
-
-      long endtime = System.currentTimeMillis();
-      long elapsed = endtime-starttime;
-      long outputFilesize = outStatus.getLen();
-      long inputFilesize = fileoffset;
-
-      System.out.println();
-      System.out.println("Input file: "+inputPath);
-      System.out.println("Output file: "+outputPath);
-      System.out.println("Split size: "+longForm.format(SAMPLE_SPLIT_SIZE));
-      System.out.println("Time to compress "+longForm.format(inputFilesize)+" bytes = "+DurationFormatUtils.formatDuration(elapsed,"HH:mm:ss")+" (h:m:s)");
-      System.out.println("Output size = "+longForm.format(outputFilesize));
-
-      System.out.println("Compression ratio: "+ form.format((float)inputFilesize/outputFilesize)+":1");
-      System.out.println("Input MD5: "+new BigInteger(1,md5.digest()).toString(16).toUpperCase());
+      cfg.init(sa[0], sa[1]);
+      new AvroizeFile().avroIzeFile(cfg);
     }
-    catch(IOException | NoSuchAlgorithmException ex) {
-      System.out.println(ex);
+    catch (IOException | NoSuchAlgorithmException ex ) {
+
     }
+  }
+  
+  private int sparkPartitionSize;
+  public void avroIzeFile(AvroApiConfig cfg) throws IOException, NoSuchAlgorithmException
+  {
+    sparkPartitionSize = cfg.getPartitionSize();
+    FilePack[] filedata = cfg.getFileData();
+    System.out.println("AvroizeFile: input: "+filedata[INP].p+" output: "+filedata[OUTP].p+" partition size: "+sparkPartitionSize);
+    
+    addMeta(cfg); //must be done at the start
+    cfg.prepare();
+    
+    MessageDigest md5 = MessageDigest.getInstance("MD5");
+
+    byte[] ba = new byte[sparkPartitionSize];
+    long starttime = System.currentTimeMillis();
+    long fileoffset = 0;
+    int countRead = fillBuffer(fileoffset,ba,filedata[INP].inputStream);
+
+    while(countRead != -1) {
+      md5.update(ba, 0, countRead);
+      if(countRead != sparkPartitionSize)
+        for(int i=countRead;i<sparkPartitionSize;i++)
+          ba[i] = 0; //zero out unread
+
+      cfg.write(fileoffset,(long)countRead,ba);
+
+      fileoffset += countRead;
+      countRead = fillBuffer(fileoffset,ba,filedata[INP].inputStream);
+      System.out.println("countRead: "+countRead);
+    }
+    cfg.close();
+
+    String MD5String = new BigInteger(1,md5.digest()).toString(16).toUpperCase();
+    //addMeta(cfg,MD5String); must be done at the start
+
+    FileStatus outStatus = filedata[OUTP].fSys.getFileStatus(filedata[OUTP].p);
+
+    long endtime = System.currentTimeMillis();
+    long elapsed = endtime-starttime;
+    long outputFilesize = outStatus.getLen();
+    long inputFilesize = fileoffset;
+
+    System.out.println();
+    System.out.println("Input file: "+filedata[INP].p);
+    System.out.println("Output file: "+filedata[OUTP].p);
+    System.out.println("Split size: "+longForm.format(sparkPartitionSize));
+    System.out.println("Time to compress "+longForm.format(inputFilesize)+" bytes = "+DurationFormatUtils.formatDuration(elapsed,"HH:mm:ss")+" (h:m:s)");
+    System.out.println("Output size = "+longForm.format(outputFilesize));
+
+    System.out.println("Compression ratio: "+ form.format((float)inputFilesize/outputFilesize)+":1");
+    System.out.println("Input MD5: "+new BigInteger(1,md5.digest()).toString(16).toUpperCase());
   }
 
   private int fillBuffer(long offset, byte[]ba,FSDataInputStream is)
   {
      int count = 0;
      while(count < ba.length) {
-       int ret = -1;
+       int ret;
        try {
-         //System.out.println("Trying to read from "+(offset+count)+" to buffer offset "+count+" length "+(ba.length-count));
          ret = is.read(offset+count,ba,count,ba.length-count);
-         //System.out.println("Read "+ret+" bytes");
        }
        catch(IOException ex) {
          System.err.println("IOException file read: "+ex.getLocalizedMessage());
@@ -116,32 +104,35 @@ public class AvroizeFile
      return count;
   }
 
-  private DecimalFormat form = new DecimalFormat("####.#");
-  private DecimalFormat longForm = new DecimalFormat("#,###");
+  private final DecimalFormat form = new DecimalFormat("####.#");
+  private final DecimalFormat longForm = new DecimalFormat("#,###");
 
-  private void addMeta(FileStatus inf, DataFileWriter<?> dfw, String md5)
+  private void addMeta(AvroApiConfig cfg)//, String md5)
   {
+    FileStatus inf = cfg.getFileData()[INP].inputFileStatus;
     DateFormat df = new SimpleDateFormat("EEE, d MMM yyyy HH:mm:ss.SSS Z");
     String fLength = ""+inf.getLen();
     String modStamp = df.format(new Date(inf.getModificationTime()));
     String dateNow = df.format(new Date());
     String builtBy = AvroizeFile.class.getName();
     String path = inf.getPath().toString();
-
-    dfw.setMeta(SOURCE_FILE_PATH_META_KEY,path);
+    String buffSize = ""+cfg.getPartitionSize();
+    
+    cfg.setMeta(SOURCE_FILE_PATH_META_KEY,path);
       System.out.println("Avro meta data/path: "+path);
-    dfw.setMeta(SOURCE_FILE_MODTIME_META_KEY,modStamp);
+    cfg.setMeta(SOURCE_FILE_MODTIME_META_KEY,modStamp);
       System.out.println("Avro meta data/modtime: "+modStamp);
-    dfw.setMeta(SOURCE_FILE_LENGTH_META_KEY,fLength);
+    cfg.setMeta(SOURCE_FILE_LENGTH_META_KEY,fLength);
       System.out.println("Avro meta data/length: "+fLength);
-    dfw.setMeta(AVRO_FILE_CREATION_DATE_META_KEY,dateNow);
+    cfg.setMeta(AVRO_FILE_RECORD_BUFFER_SIZE_KEY,buffSize);
+      System.out.println("Avro meta data/record buffer size: "+buffSize);
+    cfg.setMeta(AVRO_FILE_CREATION_DATE_META_KEY,dateNow);
       System.out.println("Avro meta data/dateNow: "+dateNow);
-    dfw.setMeta(AVRO_FILE_BUILDER_META_KEY,builtBy);
+    cfg.setMeta(AVRO_FILE_BUILDER_META_KEY,builtBy);
       System.out.println("Avro meta data/builtBy: "+builtBy);
-    dfw.setMeta(BE_AVRO_VERSION_META_KEY,BE_AVRO_VERSION);
+    cfg.setMeta(BE_AVRO_VERSION_META_KEY,BE_AVRO_VERSION);
       System.out.println("Avro meta data/version: "+BE_AVRO_VERSION);
-    dfw.setMeta(AVRO_DATA_MD5,md5);
-      System.out.println("Avro original file MD5: "+md5);
+    //cfg.setMeta(AVRO_DATA_MD5,md5);
+    //  System.out.println("Avro original file MD5: "+md5);
   }
-
 }

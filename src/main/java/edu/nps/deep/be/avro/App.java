@@ -54,6 +54,7 @@ public class App
   {
     public String inputpath;
     public String outputpath;
+    public String thirdpath;
     public int max2Process = Integer.MAX_VALUE;
   }
 
@@ -75,4 +76,26 @@ public class App
     }
     return aa;
   }
+
+  public static AppArgs get3PathsAndCount(String[] args)
+  {
+    String[] arr = getPaths(args, 3);
+    AppArgs aa = new AppArgs();
+    aa.inputpath = arr[0];
+    aa.outputpath = arr[1];
+    aa.thirdpath = arr[2];
+
+    if(args.length>3) {
+      try {
+        aa.max2Process = Integer.parseInt(args[2]);
+      }
+      catch(Exception ex) {
+        System.err.println("Error parsing integer (3rd argument)");
+        System.exit(-1);
+      }
+    }
+    return aa;
+
+  }
+
 }

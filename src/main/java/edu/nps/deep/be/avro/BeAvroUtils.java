@@ -1,10 +1,12 @@
 package edu.nps.deep.be.avro;
 
+import org.apache.avro.mapred.FsInput;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
-import org.apache.avro.mapred.FsInput;
+
 import java.io.IOException;
 import java.net.URI;
+import java.util.ArrayList;
 
 /**
  * Created by mike on 5/30/17.
@@ -13,6 +15,9 @@ public class BeAvroUtils
 {
   public static class FilePack
   {
+    public static int INP = 0;
+    public static int OUTP = 1;
+
     URI uri;
     FileSystem fSys;
     Path p;
@@ -51,7 +56,7 @@ public class BeAvroUtils
           pack.inputFileStatus = pack.fSys.getFileStatus(pack.p);
           if (makeStreams) {
             pack.inputStream = pack.fSys.open(pack.p);
-            pack.inputFsInput = new FsInput(pack.p, pack.fSys);
+            pack.inputFsInput = new FsInput(pack.p, new Configuration()); //pack.fSys.getConf());
           }
         }
         else
@@ -74,5 +79,56 @@ public class BeAvroUtils
   {
     URI uri = URI.create(pathString);
     return getFS(uri);
+  }
+
+  public static Object getFileList(BeAvroUtils.FilePack[] filedata) throws IOException
+  {
+    return getFileList(filedata,Integer.MAX_VALUE);
+  }
+
+  public static ArrayList<String> getFileList(BeAvroUtils.FilePack[] filedata, int maxFiles) throws IOException
+  {
+    int INP = 0, OUTP = 1;
+
+    if (!filedata[INP].fSys.isDirectory(filedata[INP].p)) {
+      System.err.println("Input path is not a directory");
+      System.exit(-1);
+    }
+
+    FileSystem inpFs = filedata[INP].fSys;
+
+    ArrayList<String> filePaths = new ArrayList<>();
+    FileStatus[] fs = inpFs.listStatus(filedata[INP].p);
+    if (fs == null || fs.length <= 0) {
+      System.err.println("No files found in " + filedata[INP].uri);
+      System.exit(-1);
+    }
+    int fcount = 0;
+    for (FileStatus fileS : fs) {
+      if (!fileS.isFile())
+        continue;
+      if (fileExists(fileS, filedata[OUTP]))
+        continue;
+      filePaths.add(fileS.getPath().toString());
+      fcount++;
+      if (fcount >= maxFiles)
+        break;
+    }
+    System.out.println("" + filePaths.size() + " unconverted files found in " + filedata[INP].uri);
+    return filePaths;
+  }
+
+  private static boolean fileExists(FileStatus inFs, BeAvroUtils.FilePack outPack)
+  {
+    String inputName = inFs.getPath().getName();
+    Path outpath = new Path(outPack.p,inputName+".avro");
+    try {
+      return outPack.fSys.exists(outpath);
+    }
+    catch(IOException ex) {
+      System.err.println("Error when checking if output file exists -- "+outpath.toString()+" : "+ex.getLocalizedMessage());
+      System.exit(-1);
+      return true; // not used but avoids ide error
+    }
   }
 }

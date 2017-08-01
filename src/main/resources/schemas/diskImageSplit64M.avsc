@@ -1,0 +1,9 @@
+{"namespace": "edu.nps.deep.be.avro.schemas",
+ "type": "record",
+ "name": "DiskImageSplit64M",
+ "fields": [
+   {"name": "fileoffset", "type": "long"},
+   {"name": "datalength", "type": "long"},
+   {"name": "data", "type": {"type": "fixed", "size": 67108864, "name": "SplitData64M"}}
+  ]
+}

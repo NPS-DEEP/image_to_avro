@@ -2,10 +2,15 @@ package edu.nps.deep.be.avro;
 
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericRecord;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 
 //package pl.edu.icm.sparkutils.avro;
 
@@ -99,6 +104,5 @@ public class AvroUtils
       throw new RuntimeException(e);
     }
   }
-
 
 }

@@ -13,6 +13,7 @@ public class BEAvroConstants
   public static String SOURCE_FILE_MODTIME_META_KEY = "sourceFileLastModified";
   public static String AVRO_FILE_CREATION_DATE_META_KEY = "avroFileCreation";
   public static String AVRO_FILE_BUILDER_META_KEY = "avroBuiltBy";
+  public static String AVRO_FILE_RECORD_BUFFER_SIZE_KEY = "avroRecordBufferSize";
   public static String AVRO_DATA_MD5 = "avroDataMd5";
 
   public static String DEFAULT_SAMPLE_FILE = "/Users/mike/Desktop/encase.e01.work/e01.raw";//"/Users/mike/Desktop/avrowork/firstimage.bin";

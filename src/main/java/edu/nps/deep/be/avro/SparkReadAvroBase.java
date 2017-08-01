@@ -1,14 +1,9 @@
 package edu.nps.deep.be.avro;
 
-import edu.nps.deep.be.avro.BeAvroUtils.FilePack;
-import edu.nps.deep.be.avro.schemas.DiskImageSplit;
 import org.apache.avro.Schema;
-import org.apache.avro.file.DataFileReader;
-import org.apache.avro.io.DatumReader;
 import org.apache.avro.mapred.AvroKey;
 import org.apache.avro.mapreduce.AvroJob;
 import org.apache.avro.mapreduce.AvroKeyInputFormat;
-import org.apache.avro.specific.SpecificDatumReader;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.spark.Accumulator;
@@ -23,65 +18,51 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.text.DecimalFormat;
 
-import static edu.nps.deep.be.avro.BEAvroConstants.*;
+import java.text.SimpleDateFormat;
+import java.util.TimeZone;
 
 /**
  * Created by mike on 3/29/17.
  * run with spark-submit 
  */
-public class SparkReadAvro implements Serializable
+abstract public class SparkReadAvroBase implements Serializable
 {
-  static {
+  //static {
     //System.load(new java.io.File("/user/jmbailey/nativelibs/libbe_scan_jni.so.0.0.0").getAbsolutePath());
     //System.load("/user/jmbailey/nativelibs/libbe_scan_jni.so");
-  }
-
-  public static void main(String[] args)
-  {
-    new SparkReadAvro().sparkReadAvro(App.getPaths(args,1)[0]);
-  }
+  //}
 
   /*
     This reads in the avro file (compressed) and presents it as uncompressed byte arrays, size = specified in Avro
      schema, or less if last record is short
   */
-
-  public void sparkReadAvro(String path)
+  abstract protected void init(String path);
+  abstract protected BEAvroMetaData getMetadata();
+  abstract protected Schema getSchema();
+  abstract protected Function getMapReadFunction(final Accumulator<Double> byteCountAccumulator, final Broadcast<BEAvroMetaData> metaBroadcast);
+  
+  private final long sleep = 3;
+  private String description = "Spark job to read in Avro file -- dummy processing simulation of "+sleep+" seconds per record.";
+  
+  public SparkReadAvroBase(String path)
   {
-    System.out.println("SparkReadAvro: input: "+path);
+    System.out.println(description);
+    System.out.println(getClass().getSimpleName()+": input: "+path);
 
     SparkConf conf = new SparkConf().setAppName("SparkReadAvro");
     conf.setMaster("local[*]");
     JavaSparkContext cont = new JavaSparkContext(conf);
-    int INP = 0;
-    BEAvroMetaData metadata = new BEAvroMetaData(); //default
-    try {
-      FilePack[] fileData = BeAvroUtils.getFileObjects(path);
-      DatumReader<DiskImageSplit> diDatumReader = new SpecificDatumReader<>(DiskImageSplit.class);
-      DataFileReader<DiskImageSplit> dfr = new DataFileReader<>(fileData[INP].inputFsInput,diDatumReader); //inf,diDatumReader);
 
-      metadata = new BEAvroMetaData(
-          dfr.getMetaString(SOURCE_FILE_PATH_META_KEY),
-          dfr.getMetaString(SOURCE_FILE_LENGTH_META_KEY),
-          dfr.getMetaString(SOURCE_FILE_MODTIME_META_KEY),
-          dfr.getMetaString(AVRO_FILE_BUILDER_META_KEY),
-          dfr.getMetaString(AVRO_FILE_CREATION_DATE_META_KEY),
-          dfr.getMetaString(BE_AVRO_VERSION_META_KEY),
-          dfr.getMetaString(AVRO_DATA_MD5));
-    }
-    catch(IOException ex) {
-      System.err.println("Error retrieving meta data from "+path);
-    }
-    System.out.println(metadata);
-
+    init(path);
+    
     // This is how we get this metadata out to every executor
-    final Broadcast<BEAvroMetaData> metaBroadcast = cont.broadcast(metadata);
+    final Broadcast<BEAvroMetaData> metaBroadcast = cont.broadcast(getMetadata());
 
     // This is how we count the processed bytes
     // final LongAccumulator byteCountAccumulator = cont.sc().longAccumulator("bytecount");   this would be better, but it's newer spark
     final Accumulator<Double> byteCountAccumulator = cont.accumulator(0.0d);
 
-    Schema schema = AvroUtils.toSchema(DiskImageSplit.class.getName());
+    Schema schema = getSchema(); //from subclass
     Job job = getJob(schema);
 
     // This api doesn't seem to be terribly intuitive, to say the least.
@@ -94,34 +75,47 @@ public class SparkReadAvro implements Serializable
 
     JavaRDD<AvroKey> keysRdd = pairRdd.keys();
 
-    JavaRDD mappedRdd = keysRdd.map(
-      new Function<AvroKey,Object>()
-      {
-        public Object call(AvroKey key)
-        {
-          DiskImageSplit dis = (DiskImageSplit)key.datum();
-          toBulkExtractor(dis.getData().bytes(),dis.getDatalength(),dis.getFileoffset(),metaBroadcast.getValue());
-          byteCountAccumulator.add((double)dis.getDatalength());
-          return null;
-        }
-      }
-    );
+    JavaRDD mappedRdd = keysRdd.map(getMapReadFunction(byteCountAccumulator, metaBroadcast));
+    
+    long start = System.currentTimeMillis();
     Object n = mappedRdd.count(); // this starts it off
+    long end = System.currentTimeMillis();
 
-    System.out.println("sparkReadAvro() complete: "+n+" avro records processed");
-    System.out.println(longForm.format(byteCountAccumulator.value())+" bytes processed");
+    System.out.println("***************************************");
+    System.out.println("Avro read complete: ");
+    System.out.println(""+n+" records processed, "+longForm.format(byteCountAccumulator.value())+" decompressed bytes processed");
+    System.out.println("processing time (h:m:s:ms) "+formatTime(end-start));
+    System.out.println("***************************************");
   }
 
   private DecimalFormat longForm = new DecimalFormat("#,###");
 
-  private void toBulkExtractor(byte[] data, long dsize, long sourceFileOffset, BEAvroMetaData metadata)
+  private String formatTime(long msecs)
   {
-    System.out.println("toBulkExtractor(): data, "+longForm.format(dsize)+" at file offset "+longForm.format(sourceFileOffset));
-    System.out.println("meta:"+metadata);
+    //return String.format("%1$tH:%1$tM:%1$tS", msecs);   
+    // Compiler will take care of constant arithmetics
+    if (24 * 60 * 60 * 1000 > msecs) {
+      SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss.SSS");
+      sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+      return sdf.format(msecs);
+    }
+    else {
+      SimpleDateFormat sdf = new SimpleDateFormat(":mm:ss.SSS");
+      sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
 
-    try{Thread.sleep(3*1000);}catch(InterruptedException ex){}
+      // Keep long data type
+      // Compiler will take care of constant arithmetics
+      long hours = msecs / (60L * 60L * 1000L);
+      return hours + sdf.format(msecs);
+    }
+  }
+  
+  protected void toBulkExtractor(byte[] data, long dsize, long sourceFileOffset, BEAvroMetaData metadata)
+  {
+    System.out.println("toBulkExtractor(), "+longForm.format(dsize)+" bytes at file offset "+longForm.format(sourceFileOffset));
 
-    System.out.println("back from bulk extractor (3 sec dummy sleep");
+    try{Thread.sleep(sleep*1000);}catch(InterruptedException ex){}
+
   /*  BEScan scanner = new BEScan("email", data, dsize);
 
     Artifact artifact = scanner.next();  //looks like it doesn't have a good way to return null or not-found

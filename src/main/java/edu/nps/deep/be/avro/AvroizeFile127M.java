@@ -1,0 +1,17 @@
+package edu.nps.deep.be.avro;
+
+public class AvroizeFile127M
+{
+  public static void main(String[] args)
+  {
+    String[] sa = App.getPaths(args, 2);
+    AvroConfig127M cfg = new AvroConfig127M();
+    try {
+      cfg.init(sa[0], sa[1]);
+      new AvroizeFile().avroIzeFile(cfg);
+    }
+    catch (Exception ex ) {
+      System.out.println("Exception: "+ex.getClass().getSimpleName()+": "+ex.getLocalizedMessage());
+    }
+  }
+}
