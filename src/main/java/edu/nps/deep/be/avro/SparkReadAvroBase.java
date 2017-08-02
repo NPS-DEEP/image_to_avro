@@ -41,8 +41,16 @@ abstract public class SparkReadAvroBase implements Serializable
   abstract protected Schema getSchema();
   abstract protected Function getMapReadFunction(final Accumulator<Double> byteCountAccumulator, final Broadcast<BEAvroMetaData> metaBroadcast);
   
-  private final long sleep = 3;
-  private String description = "Spark job to read in Avro file -- dummy processing simulation of "+sleep+" seconds per record.";
+  private final DecimalFormat longForm = new DecimalFormat("#,###");
+  private final DecimalFormat sleepForm = new DecimalFormat("#.###");
+
+  private final double SLEEPSECS = 3.d;
+  private final double SIXTYFOURMEG = 64.d*1024.d*1024.d;
+  private final double sleepFactor = (SLEEPSECS*1000.d)/SIXTYFOURMEG;   //64Mb gives 3000ms = 3 sec.
+
+  private final String description = "Spark job to read in Avro file -- dummy processing simulation of processing loop.\n"+
+                                     "Simulation sleep time = "+SLEEPSECS+" seconds per 64Mb of data";
+  
   
   public SparkReadAvroBase(String path)
   {
@@ -88,8 +96,6 @@ abstract public class SparkReadAvroBase implements Serializable
     System.out.println("***************************************");
   }
 
-  private DecimalFormat longForm = new DecimalFormat("#,###");
-
   private String formatTime(long msecs)
   {
     //return String.format("%1$tH:%1$tM:%1$tS", msecs);   
@@ -112,9 +118,18 @@ abstract public class SparkReadAvroBase implements Serializable
   
   protected void toBulkExtractor(byte[] data, long dsize, long sourceFileOffset, BEAvroMetaData metadata)
   {
-    System.out.println("toBulkExtractor(), "+longForm.format(dsize)+" bytes at file offset "+longForm.format(sourceFileOffset));
+    double sleepTimeMs = sleepFactor*dsize;
+    StringBuilder sb = new StringBuilder();
+    sb.append("toBulkExtractor(), ");
+    sb.append(longForm.format(dsize));
+    sb.append(" bytes at file offset ");
+    sb.append(longForm.format(sourceFileOffset));
+    sb.append(" sleep ");
+    sb.append(sleepForm.format(sleepTimeMs/1000.d));
+    sb.append(" seconds");
+    System.out.println(sb.toString());
 
-    try{Thread.sleep(sleep*1000);}catch(InterruptedException ex){}
+    try{Thread.sleep((long)sleepTimeMs);}catch(InterruptedException ex){}
 
   /*  BEScan scanner = new BEScan("email", data, dsize);
 

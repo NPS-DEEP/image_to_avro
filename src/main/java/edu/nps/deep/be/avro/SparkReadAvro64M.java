@@ -75,6 +75,7 @@ public class SparkReadAvro64M extends SparkReadAvroBase
   {
     return new Function<AvroKey, Object>()
     {
+      @Override
       public Object call(AvroKey key)
       {
         DiskImageSplit64M dis = (DiskImageSplit64M) key.datum();

@@ -52,8 +52,6 @@ public class SparkReadAvro127M extends SparkReadAvroBase
           dfr.getMetaString(AVRO_FILE_CREATION_DATE_META_KEY),
           dfr.getMetaString(BE_AVRO_VERSION_META_KEY),
           dfr.getMetaString(AVRO_DATA_MD5));
-      
-      System.out.println("SparkReadAvro127M.init() meta: "+metadata);
     }
     catch (IOException ex) {
       System.err.println("Error retrieving meta data from " + path);
@@ -77,6 +75,7 @@ public class SparkReadAvro127M extends SparkReadAvroBase
   {
     return new Function<AvroKey, Object>()
     {
+      @Override
       public Object call(AvroKey key)
       {
         DiskImageSplit127M dis = (DiskImageSplit127M) key.datum();
